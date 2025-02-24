@@ -35,6 +35,25 @@ services:
     networks:
       - app-network
 
+  attraction-service:
+    build: ./attraction_service
+    container_name: attraction-service
+    environment:
+      - DB_HOST=db
+      - DB_USER=postgres
+      - DB_PASSWORD=123456
+      - DB_NAME=TravelApp
+      - AUTH_SERVICE_URL=http://auth-service:8082
+    ports:
+      - "8085:8085"
+    volumes:
+      - ./uploads:/app/uploads
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - app-network
+
   events-service:
     build: ./events_service
     container_name: events-service
@@ -44,6 +63,8 @@ services:
       - DB_PASSWORD=123456
       - DB_NAME=TravelApp
       - AUTH_SERVICE_URL=http://auth-service:8082
+    volumes:
+      - ./uploads/events:/app/uploads/events  # ✅ Map local uploads directory
     ports:
       - "8083:8083"
     depends_on:

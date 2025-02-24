@@ -11,16 +11,14 @@ import (
 func SetupRoutes() *mux.Router {
 	r := mux.NewRouter()
 
-	uploadDir := "/app/uploads" // Must match Docker volume mount
+	uploadDir := "/app/uploads"
 
 	log.Printf("Serving static files from: %s", uploadDir)
 
-	// ✅ Serve static files under /uploads/
 	r.PathPrefix("/uploads/").Handler(
 		http.StripPrefix("/uploads/", http.FileServer(http.Dir(uploadDir))),
 	).Methods("GET")
 
-	// Attraction routes
 	admin := r.PathPrefix("/admin/attractions").Subrouter()
 	admin.Use(middleware.AdminAuthMiddleware)
 	admin.HandleFunc("", controllers.CreateAttraction).Methods("POST")

@@ -26,6 +26,7 @@ type AttractionRequest struct {
 	Title       string `json:"title"`
 	Description string `json:"description"`
 	City        string `json:"city"`
+	Address     string `json:"address"`
 	Location    string `json:"location"`
 	ImageURL    string `json:"image_url"`
 }
@@ -65,6 +66,7 @@ func CreateAttraction(w http.ResponseWriter, r *http.Request) {
 		Description: r.FormValue("description"),
 		City:        r.FormValue("city"),
 		Location:    r.FormValue("location"),
+		Address:     r.FormValue("address"),
 		AdminID:     adminID,
 		ImageURL:    imageURL,
 	}
@@ -78,10 +80,8 @@ func CreateAttraction(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(attraction)
 }
 func uploadImage(file io.Reader, filename string) (string, error) {
-	// ✅ Use absolute path for consistency
 	uploadDir := "/app/uploads" // Matches Docker volume mount path
 
-	// Create uploads directory if it doesn't exist
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create upload directory: %v", err)
 	}
@@ -95,12 +95,10 @@ func uploadImage(file io.Reader, filename string) (string, error) {
 	}
 	defer dst.Close()
 
-	// Save the uploaded file
 	if _, err := io.Copy(dst, file); err != nil {
 		return "", fmt.Errorf("failed to save file: %v", err)
 	}
 
-	// Return URL path for accessing the image
 	return fmt.Sprintf("/uploads/%s", randomFilename), nil
 }
 
@@ -134,6 +132,7 @@ func UpdateAttraction(w http.ResponseWriter, r *http.Request) {
 	attraction.Title = req.Title
 	attraction.Description = req.Description
 	attraction.City = req.City
+	attraction.Address = req.Address
 	attraction.Location = req.Location
 	attraction.ImageURL = req.ImageURL
 

@@ -12,16 +12,12 @@ import (
 )
 
 func main() {
-	// Connect to Database
 	db.ConnectDB()
 
-	// Initialize Router
 	r := mux.NewRouter()
 
-	// Register Routes
 	routes.RegisterBlogRoutes(r)
 
-	// Start Server
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8081"

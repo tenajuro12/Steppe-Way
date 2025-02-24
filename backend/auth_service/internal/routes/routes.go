@@ -9,13 +9,11 @@ import (
 func SetupRoutes() *mux.Router {
 	r := mux.NewRouter()
 
-	// Public routes
 	r.HandleFunc("/register", controllers.Register).Methods("POST")
 	r.HandleFunc("/login", controllers.Login).Methods("POST")
-	r.HandleFunc("/validate-session", controllers.ValidateSession).Methods("GET") // Add this line
-	r.HandleFunc("/validate-admin", controllers.ValidateAdmin).Methods("GET")     // Add this line
+	r.HandleFunc("/validate-session", controllers.ValidateSession).Methods("GET")
+	r.HandleFunc("/validate-admin", controllers.ValidateAdmin).Methods("GET")
 
-	// Protected routes
 	protected := r.PathPrefix("/").Subrouter()
 	protected.Use(middleware.AuthMiddleware)
 	protected.HandleFunc("/profile", controllers.GetProfile).Methods("GET")

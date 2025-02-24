@@ -1,86 +1,119 @@
 package main
 
 import (
-	"fmt"
-	middlewares "gateway_service/middleware"
-	"github.com/gorilla/mux"
 	"log"
 	"net/http"
 	"net/http/httputil"
 	"net/url"
 	"strings"
+
+	middlewares "gateway_service/middleware"
+	"github.com/gorilla/mux"
 )
+
+type ServiceConfig struct {
+	URL   string
+	Paths []string
+	Auth  bool
+}
+
+var services = map[string]ServiceConfig{
+	"blog": {
+		URL:   "http://blogs-service:8081",
+		Paths: []string{"/blogs"},
+		Auth:  true,
+	},
+	"auth": {
+		URL: "http://auth-service:8082",
+		Paths: []string{
+			"/login",
+			"/register",
+			"/profile",
+			"/validate-admin",
+			"/validate-session",
+		},
+		Auth: false,
+	},
+	"events": {
+		URL: "http://events-service:8083",
+		Paths: []string{
+			"/admin/events",
+			"/events",
+			"/uploads/events",
+		},
+		Auth: false,
+	},
+
+	"attractions": {
+		URL: "http://attraction-service:8085",
+		Paths: []string{
+			"/admin/attractions",
+			"/attractions",
+			"/uploads",
+		},
+		Auth: false,
+	},
+}
+
+var pathAuthOverrides = map[string]bool{
+	"/admin/events":      true,
+	"/admin/attractions": true,
+	"/attractions":       true,
+}
 
 func main() {
 	r := mux.NewRouter()
 
-	r.PathPrefix("/blogs").Handler(middlewares.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveReverseProxy(w, r)
-	})))
-	r.PathPrefix("/validate-admin").Handler(middlewares.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveReverseProxy(w, r)
-	})))
-	r.PathPrefix("/validate-session").Handler(middlewares.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveReverseProxy(w, r)
-	})))
+	setupRoutes(r)
 
-	r.PathPrefix("/login").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveReverseProxy(w, r)
-	}))
-	r.PathPrefix("/register").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveReverseProxy(w, r)
-	}))
-	r.PathPrefix("/profile").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveReverseProxy(w, r)
-	}))
+	handler := middlewares.CorsMiddleware(r)
 
-	r.PathPrefix("/admin/events").Handler(middlewares.AuthMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveReverseProxy(w, r)
-	})))
-
-	r.PathPrefix("/events").Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		serveReverseProxy(w, r)
-	}))
-
-	fmt.Println("Gateway running on port 8080...")
-	log.Fatal(http.ListenAndServe(":8080", r))
+	log.Println("Gateway service running on port 8080...")
+	log.Fatal(http.ListenAndServe(":8080", handler))
 }
 
-func serveReverseProxy(w http.ResponseWriter, r *http.Request) {
-	blogServiceURL := "http://blogs-service:8081"
-	authServiceURL := "http://auth-service:8082"
-	eventsServiceURL := "http://events-service:8083"
+func setupRoutes(r *mux.Router) {
+	for _, config := range services {
+		for _, path := range config.Paths {
+			handler := createProxyHandler(config.URL)
 
-	var target string
-	switch {
-	case strings.HasPrefix(r.URL.Path, "/blogs"):
-		target = blogServiceURL
-	case strings.HasPrefix(r.URL.Path, "/login") || strings.HasPrefix(r.URL.Path, "/register") || strings.HasPrefix(r.URL.Path, "/profile"):
-		target = authServiceURL
-	case strings.HasPrefix(r.URL.Path, "/admin/events"):
-		target = eventsServiceURL
-	case strings.HasPrefix(r.URL.Path, "/events"):
-		target = eventsServiceURL
-	case strings.HasPrefix(r.URL.Path, "/validate-admin") || strings.HasPrefix(r.URL.Path, "/validate-session"):
-		target = authServiceURL
-	default:
-		http.Error(w, "Bad request", http.StatusBadRequest)
-		return
+			requiresAuth := config.Auth
+			if override, exists := pathAuthOverrides[path]; exists {
+				requiresAuth = override
+			}
+
+			if requiresAuth {
+				handler = middlewares.AuthMiddleware(handler)
+			}
+
+			r.PathPrefix(path).Handler(handler)
+		}
 	}
+}
 
-	url, err := url.Parse(target)
-	if err != nil {
-		http.Error(w, "Bad service URL", http.StatusInternalServerError)
-		return
-	}
+func createProxyHandler(targetServiceURL string) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		target, err := url.Parse(targetServiceURL)
+		if err != nil {
+			http.Error(w, "Invalid target URL", http.StatusInternalServerError)
+			return
+		}
 
-	proxy := httputil.NewSingleHostReverseProxy(url)
+		log.Printf("Proxying request to: %s%s", target.String(), r.URL.Path)
 
-	proxy.ErrorHandler = func(w http.ResponseWriter, r *http.Request, err error) {
-		log.Printf("Proxy error: %v", err)
-		http.Error(w, "Service unavailable", http.StatusServiceUnavailable)
-	}
+		proxy := httputil.NewSingleHostReverseProxy(target)
 
-	r.Host = url.Host
-	proxy.ServeHTTP(w, r)
+		proxy.ModifyResponse = func(response *http.Response) error {
+			if response.StatusCode >= 300 && response.StatusCode < 400 {
+				location := response.Header.Get("Location")
+				if strings.Contains(location, target.Host) {
+					response.Header.Set("Location", strings.Replace(location, target.Host, "localhost:8080", 1))
+				}
+			}
+			return nil
+		}
+
+		r.Host = target.Host
+		proxy.ServeHTTP(w, r)
+	})
 }

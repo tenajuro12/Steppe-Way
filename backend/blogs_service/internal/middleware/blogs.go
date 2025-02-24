@@ -27,7 +27,6 @@ func BlogsAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Forward the session cookie
 		req.Header.Set("Cookie", r.Header.Get("Cookie"))
 
 		client := &http.Client{}

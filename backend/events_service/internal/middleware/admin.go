@@ -42,7 +42,6 @@ func AdminAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Read and parse the response body to get admin ID
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Printf("Error reading response body: %v", err)

@@ -4,7 +4,6 @@ import (
 	"gorm.io/gorm"
 )
 
-// models/blog.go
 type Blog struct {
 	gorm.Model
 	Title    string `json:"title"`
@@ -14,7 +13,6 @@ type Blog struct {
 	Category string `json:"category"`
 }
 
-// models/comment.go
 type Comment struct {
 	gorm.Model
 	Content string `json:"content"`
@@ -22,7 +20,6 @@ type Comment struct {
 	UserID  uint   `json:"user_id"`
 }
 
-// models/blog_like.go
 type BlogLike struct {
 	gorm.Model
 	UserID uint `json:"user_id"`

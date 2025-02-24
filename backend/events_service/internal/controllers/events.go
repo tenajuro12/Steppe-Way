@@ -4,10 +4,14 @@ import (
 	"diplomaPorject/backend/events_service/internal/models"
 	"diplomaPorject/backend/events_service/utils/db"
 	"encoding/json"
+	"fmt"
 	"github.com/gorilla/mux"
+	"io"
 	"log"
 	"math"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 )
@@ -23,7 +27,47 @@ type EventRequest struct {
 	ImageURL    string `json:"image_url"`
 }
 
+func generateRandomFilename(originalFilename string) string {
+	timestamp := time.Now().UnixNano()
+	return fmt.Sprintf("%d_%s", timestamp, filepath.Base(originalFilename))
+}
+
+func uploadImage(file io.Reader, filename string) (string, error) {
+	uploadDir := "/app/uploads/events" // ✅ Correct directory for event images
+
+	// Create the events directory if it doesn't exist
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		return "", fmt.Errorf("failed to create upload directory: %v", err)
+	}
+
+	randomFilename := generateRandomFilename(filename)
+	filePath := filepath.Join(uploadDir, randomFilename)
+
+	dst, err := os.Create(filePath)
+	if err != nil {
+		return "", fmt.Errorf("failed to create file: %v", err)
+	}
+	defer dst.Close()
+
+	// Save the file to the target location
+	if _, err := io.Copy(dst, file); err != nil {
+		return "", fmt.Errorf("failed to save file: %v", err)
+	}
+
+	// ✅ Return URL for accessing the image
+	return fmt.Sprintf("/uploads/events/%s", randomFilename), nil
+}
+
+// CreateEvent handles event creation with image upload
 func CreateEvent(w http.ResponseWriter, r *http.Request) {
+	// Parse multipart form (max memory: 32 MB)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		log.Printf("Failed to parse form: %v", err)
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	// Get admin ID from context
 	adminIDValue := r.Context().Value("admin_id")
 	if adminIDValue == nil {
 		log.Printf("No admin_id found in context")
@@ -38,45 +82,74 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var req EventRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		log.Printf("Failed to decode request body: %v", err)
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	// Handle image file upload
+	var imageURL string
+	file, header, err := r.FormFile("image")
+	if err == nil {
+		defer file.Close()
+		imageURL, err = uploadImage(file, header.Filename)
+		if err != nil {
+			log.Printf("Failed to upload image: %v", err)
+			http.Error(w, "Failed to upload image", http.StatusInternalServerError)
+			return
+		}
+	} else {
+		log.Println("No image uploaded. Proceeding without image.")
+	}
+
+	// Extract form fields
+	title := r.FormValue("title")
+	description := r.FormValue("description")
+	location := r.FormValue("location")
+	category := r.FormValue("category")
+	capacityStr := r.FormValue("capacity")
+	startDateStr := r.FormValue("start_date")
+	endDateStr := r.FormValue("end_date")
+
+	// Validate capacity
+	capacity, err := strconv.Atoi(capacityStr)
+	if err != nil {
+		log.Printf("Invalid capacity value: %v", err)
+		http.Error(w, "Invalid capacity value", http.StatusBadRequest)
 		return
 	}
 
-	startDate, err := time.Parse(time.RFC3339, req.StartDate)
+	// Validate dates
+	startDate, err := time.Parse(time.RFC3339, startDateStr)
 	if err != nil {
 		log.Printf("Invalid start date format: %v", err)
-		http.Error(w, "Invalid start date format", http.StatusBadRequest)
+		http.Error(w, "Invalid start date format (expected RFC3339)", http.StatusBadRequest)
 		return
 	}
 
-	endDate, err := time.Parse(time.RFC3339, req.EndDate)
+	endDate, err := time.Parse(time.RFC3339, endDateStr)
 	if err != nil {
 		log.Printf("Invalid end date format: %v", err)
-		http.Error(w, "Invalid end date format", http.StatusBadRequest)
+		http.Error(w, "Invalid end date format (expected RFC3339)", http.StatusBadRequest)
 		return
 	}
 
+	// Create the event object
 	event := models.Event{
-		Title:       req.Title,
-		Description: req.Description,
+		Title:       title,
+		Description: description,
 		StartDate:   startDate,
 		EndDate:     endDate,
-		Location:    req.Location,
-		Capacity:    req.Capacity,
+		Location:    location,
+		Capacity:    capacity,
+		Category:    category,
+		ImageURL:    imageURL,
 		AdminID:     adminID,
-		Category:    req.Category,
-		ImageURL:    req.ImageURL,
 	}
 
+	// Save to database
 	if err := db.DB.Create(&event).Error; err != nil {
 		log.Printf("Failed to create event: %v", err)
 		http.Error(w, "Failed to create event", http.StatusInternalServerError)
 		return
 	}
 
+	// Return the created event
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(event)
 }
@@ -130,7 +203,7 @@ func UpdateEvent(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "Cant update event", http.StatusBadRequest)
 		return
 	}
-	json.NewEncoder(w).Encode(&event)
+	json.NewEncoder(w).Encode(event)
 }
 
 func DeleteEvent(w http.ResponseWriter, r *http.Request) {

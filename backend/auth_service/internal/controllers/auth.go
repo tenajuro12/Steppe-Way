@@ -12,35 +12,43 @@ import (
 	"time"
 )
 
+const DefaultProfileImageURL = "../../../backend/uploads/users"
+
 func Register(w http.ResponseWriter, r *http.Request) {
 	var creds struct {
 		Username string `json:"username"`
-		Email    string `json:"'email'"`
+		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
+
 	err := json.NewDecoder(r.Body).Decode(&creds)
 	if err != nil {
-		http.Error(w, "Error with decoding", http.StatusInternalServerError)
+		http.Error(w, "Error with decoding", http.StatusBadRequest)
+		return
 	}
 
 	hashedPassword, err := hashing.HashPassword(creds.Password)
 	if err != nil {
 		http.Error(w, "Error with hashing password", http.StatusInternalServerError)
+		return
 	}
 
 	user := model.User{
-		Username: creds.Username,
-		Email:    creds.Email,
-		Password: hashedPassword,
+		Username:     creds.Username,
+		Email:        creds.Email,
+		Password:     hashedPassword,
+		ProfileImage: DefaultProfileImageURL,
 	}
 
 	if err := db.DB.Create(&user).Error; err != nil {
 		http.Error(w, "Error creating user", http.StatusInternalServerError)
+		return
 	}
 
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
 }
+
 func Login(w http.ResponseWriter, r *http.Request) {
 	var creds struct {
 		Email    string `json:"email"`
@@ -79,13 +87,11 @@ func Logout(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Delete session from database
 	if err := db.DB.Where("token = ?", cookie.Value).Delete(&model.Session{}).Error; err != nil {
 		http.Error(w, "Failed to delete session", http.StatusInternalServerError)
 		return
 	}
 
-	// Expire the cookie
 	cookie.MaxAge = -1
 	http.SetCookie(w, cookie)
 
