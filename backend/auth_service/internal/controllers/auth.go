@@ -5,9 +5,11 @@ import (
 	"authorization_service/utils/db"
 	"authorization_service/utils/hashing"
 	utils "authorization_service/utils/session"
+	"bytes"
 	"encoding/json"
 	"errors"
 	"gorm.io/gorm"
+	"log"
 	"net/http"
 	"time"
 )
@@ -34,10 +36,9 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	user := model.User{
-		Username:     creds.Username,
-		Email:        creds.Email,
-		Password:     hashedPassword,
-		ProfileImage: DefaultProfileImageURL,
+		Username: creds.Username,
+		Email:    creds.Email,
+		Password: hashedPassword,
 	}
 
 	if err := db.DB.Create(&user).Error; err != nil {
@@ -45,8 +46,42 @@ func Register(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	createDefaultProfile(user.ID, user.Username, user.Email)
+
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
+}
+func createDefaultProfile(userID uint, username, email string) {
+	profileServiceURL := "http://profile-service:8084/profiles"
+
+	profileData := map[string]interface{}{
+		"user_id":     userID,
+		"username":    username,
+		"email":       email,
+		"bio":         "I just joined!",
+		"profile_img": DefaultProfileImageURL,
+	}
+
+	data, err := json.Marshal(profileData)
+	if err != nil {
+		log.Printf("[Auth Service] Error marshaling profile data: %v", err)
+		return
+	}
+
+	log.Printf("[Auth Service] Sending profile creation request: %s", string(data)) // <-- NEW LOG
+
+	resp, err := http.Post(profileServiceURL, "application/json", bytes.NewBuffer(data))
+	if err != nil {
+		log.Printf("[Auth Service] Error calling profile service: %v", err) // <-- NEW LOG
+		return
+	}
+	defer resp.Body.Close()
+
+	log.Printf("[Auth Service] Profile service returned status: %d", resp.StatusCode) // <-- NEW LOG
+
+	if resp.StatusCode != http.StatusCreated {
+		log.Printf("[Auth Service] Profile service returned an unexpected status: %d", resp.StatusCode)
+	}
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
@@ -154,7 +189,7 @@ func ValidateAdmin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if !user.IsAdmin {
-		http.Error(w, "Forbidden", http.StatusUnauthorized) // Changed to 401
+		http.Error(w, "Forbidden", http.StatusUnauthorized)
 		return
 	}
 	w.Header().Set("Content-Type", "application/json")
