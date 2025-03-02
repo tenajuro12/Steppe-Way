@@ -85,10 +85,10 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var input struct {
-		Username   string `json:"username"`    // optional: update username
-		Email      string `json:"email"`       // optional: update email
-		Bio        string `json:"bio"`         // optional: update bio
-		ProfileImg string `json:"profile_img"` // optional: update profile image
+		Username   string `json:"username"`
+		Email      string `json:"email"`
+		Bio        string `json:"bio"`
+		ProfileImg string `json:"profile_img"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {

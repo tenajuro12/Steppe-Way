@@ -10,4 +10,6 @@ func SetupRoutes(r *mux.Router) {
 	r.HandleFunc("/profiles/{user_id}", controllers.GetProfile).Methods("GET")
 	r.HandleFunc("/profiles/{user_id}", controllers.UpdateProfile).Methods("PATCH")
 
+	r.HandleFunc("/profiles/{user_id}/follow", controllers.FollowUser).Methods("POST")
+
 }

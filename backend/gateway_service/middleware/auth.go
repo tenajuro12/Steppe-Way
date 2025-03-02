@@ -1,7 +1,10 @@
 package middlewares
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
+	"io/ioutil"
 	"log"
 	"net/http"
 )
@@ -42,6 +45,20 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			http.Error(w, fmt.Sprintf("Unauthorized - Auth service returned %d", resp.StatusCode), http.StatusUnauthorized)
 			return
 		}
+
+		body, _ := ioutil.ReadAll(resp.Body)
+		var authResponse map[string]interface{}
+		json.Unmarshal(body, &authResponse)
+
+		userID, exists := authResponse["user_id"].(float64)
+		if !exists {
+			log.Println("Auth service response did not contain user_id")
+			http.Error(w, "Unauthorized - Invalid session", http.StatusUnauthorized)
+			return
+		}
+
+		ctx := context.WithValue(r.Context(), "user_id", uint(userID))
+		r = r.WithContext(ctx)
 
 		log.Printf("Authentication successful, forwarding to blogs service")
 		next.ServeHTTP(w, r)
