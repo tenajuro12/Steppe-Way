@@ -29,6 +29,7 @@ var services = map[string]ServiceConfig{
 			"/login",
 			"/register",
 			"/profile",
+			"/update-user",
 			"/validate-admin",
 			"/validate-session",
 		},
@@ -43,6 +44,15 @@ var services = map[string]ServiceConfig{
 		},
 		Auth: false,
 	},
+	"profiles": {
+		URL: "http://profile-service:8084",
+		Paths: []string{
+			"/user/profiles",
+			"/user/profiles/{user_id}",
+			"/user/profiles/{user_id}/follow",
+		},
+		Auth: true,
+	},
 
 	"attractions": {
 		URL: "http://attraction-service:8085",
@@ -53,12 +63,26 @@ var services = map[string]ServiceConfig{
 		},
 		Auth: false,
 	},
+	"review": {
+		URL: "http://review-service:8086",
+		Paths: []string{
+			"/reviews",
+		},
+		Auth: true,
+	},
+	"uploads": {
+		URL:   "http://profile-service:8084",
+		Paths: []string{"/uploads"},
+		Auth:  false,
+	},
 }
 
 var pathAuthOverrides = map[string]bool{
 	"/admin/events":      true,
 	"/admin/attractions": true,
 	"/attractions":       true,
+	"/profiles":          true,
+	"/review":            true,
 }
 
 func main() {
@@ -86,7 +110,15 @@ func setupRoutes(r *mux.Router) {
 				handler = middlewares.AuthMiddleware(handler)
 			}
 
-			r.PathPrefix(path).Handler(handler)
+			if path == "/profiles/{user_id}" ||
+				path == "/profiles/{user_id}/follow" ||
+				path == "/profiles/{user_id}/unfollow" ||
+				path == "/profiles/{user_id}/followers" ||
+				path == "/profiles/{user_id}/following" {
+				r.Handle(path, handler).Methods("PATCH", "POST", "DELETE", "GET") // ✅ FIXED
+			} else {
+				r.PathPrefix(path).Handler(handler)
+			}
 		}
 	}
 }

@@ -18,6 +18,7 @@ func SetupRoutes() *mux.Router {
 	protected.Use(middleware.AuthMiddleware)
 	protected.HandleFunc("/profile", controllers.GetProfile).Methods("GET")
 	protected.HandleFunc("/profile", controllers.Logout).Methods("POST")
+	r.HandleFunc("/update-user", controllers.UpdateUser).Methods("PATCH")
 
 	return r
 }

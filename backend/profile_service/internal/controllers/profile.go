@@ -4,17 +4,18 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
-	"fmt"
 	"github.com/gorilla/mux"
 	"gorm.io/gorm"
+	"io"
 	"log"
 	"net/http"
+	"os"
 	"profile_service/internal/db"
 	"profile_service/internal/models"
 	"strconv"
 )
 
-const DefaultProfileImageURL = "../../../backend/uploads/users"
+const DefaultProfileImageURL = "/uploads/users/default_user.jpg"
 
 func CreateProfile(w http.ResponseWriter, r *http.Request) {
 	var p models.Profile
@@ -77,78 +78,57 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 
 func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	userIDStr := vars["user_id"]
-	userID, err := strconv.Atoi(userIDStr)
-	if err != nil {
-		http.Error(w, "Invalid user ID", http.StatusBadRequest)
-		return
-	}
-
-	var input struct {
-		Username   string `json:"username"`
-		Email      string `json:"email"`
-		Bio        string `json:"bio"`
-		ProfileImg string `json:"profile_img"`
-	}
-
-	if err := json.NewDecoder(r.Body).Decode(&input); err != nil {
-		http.Error(w, "Invalid JSON", http.StatusBadRequest)
-		return
-	}
-
-	if input.Username != "" || input.Email != "" {
-		authUpdate := make(map[string]string)
-		if input.Username != "" {
-			authUpdate["username"] = input.Username
-		}
-		if input.Email != "" {
-			authUpdate["email"] = input.Email
-		}
-		payloadBytes, err := json.Marshal(authUpdate)
-		if err != nil {
-			http.Error(w, "Failed to marshal auth update payload", http.StatusInternalServerError)
-			return
-		}
-
-		authURL := fmt.Sprintf("http://auth-service:8082/users/%d", userID)
-		req, err := http.NewRequest("PATCH", authURL, bytes.NewBuffer(payloadBytes))
-		if err != nil {
-			http.Error(w, "Failed to create request to auth service", http.StatusInternalServerError)
-			return
-		}
-		req.Header.Set("Content-Type", "application/json")
-
-		client := &http.Client{}
-		resp, err := client.Do(req)
-		if err != nil {
-			http.Error(w, "Failed to update user info in auth service", http.StatusInternalServerError)
-			return
-		}
-		defer resp.Body.Close()
-
-		if resp.StatusCode != http.StatusOK {
-			http.Error(w, "Auth service update failed", http.StatusInternalServerError)
-			return
-		}
-	}
+	userID := vars["user_id"]
 
 	var profile models.Profile
 	if err := db.DB.Where("user_id = ?", userID).First(&profile).Error; err != nil {
-		http.Error(w, "Profile not found", http.StatusNotFound)
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			http.Error(w, "Profile not found", http.StatusNotFound)
+		} else {
+			http.Error(w, "Database error", http.StatusInternalServerError)
+		}
 		return
 	}
 
-	if input.Username != "" {
-		profile.Username = input.Username
+	if err := r.ParseMultipartForm(10 << 20); err != nil {
+		http.Error(w, "Failed to parse multipart form", http.StatusBadRequest)
+		return
 	}
-	if input.Email != "" {
-		profile.Email = input.Email
+
+	username := r.FormValue("username")
+	email := r.FormValue("email")
+	bio := r.FormValue("bio")
+
+	if username != "" {
+		profile.Username = username
 	}
-	if input.Bio != "" {
-		profile.Bio = input.Bio
+	if email != "" {
+		profile.Email = email
 	}
-	if input.ProfileImg != "" {
-		profile.ProfileImg = input.ProfileImg
+	if bio != "" {
+		profile.Bio = bio
+	}
+
+	file, handler, err := r.FormFile("image")
+	if err == nil {
+		defer file.Close()
+		filename := strconv.FormatInt(int64(profile.UserID), 10) + "_" + handler.Filename
+		savePath := "uploads/users/" + filename
+
+		dst, err := createOrReplaceFile(savePath)
+		if err != nil {
+			http.Error(w, "Unable to save image", http.StatusInternalServerError)
+			return
+		}
+		defer dst.Close()
+
+		_, err = dst.ReadFrom(file)
+		if err != nil {
+			http.Error(w, "Error saving file", http.StatusInternalServerError)
+			return
+		}
+
+		profile.ProfileImg = "/" + savePath
 	}
 
 	if err := db.DB.Save(&profile).Error; err != nil {
@@ -156,6 +136,57 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if username != "" || email != "" {
+		if err := updateAuthService(userID, username, email); err != nil {
+			http.Error(w, "Auth service update failed", http.StatusInternalServerError)
+			return
+		}
+	}
+
 	w.Header().Set("Content-Type", "application/json")
 	json.NewEncoder(w).Encode(profile)
+}
+
+func createOrReplaceFile(path string) (*os.File, error) {
+	_ = os.MkdirAll("uploads/users", os.ModePerm)
+	return os.Create(path)
+}
+
+func updateAuthService(userID, username, email string) error {
+	authServiceURL := "http://auth-service:8082/update-user"
+
+	updateData := map[string]string{
+		"user_id": userID,
+	}
+
+	if username != "" {
+		updateData["username"] = username
+	}
+	if email != "" {
+		updateData["email"] = email
+	}
+
+	data, _ := json.Marshal(updateData)
+
+	req, err := http.NewRequest("PATCH", authServiceURL, bytes.NewBuffer(data))
+	if err != nil {
+		return err
+	}
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{}
+	resp, err := client.Do(req)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	body, _ := io.ReadAll(resp.Body)
+	log.Printf("auth-service PATCH response %d: %s", resp.StatusCode, string(body))
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return errors.New("auth-service update failed")
+	}
+
+	return nil
 }

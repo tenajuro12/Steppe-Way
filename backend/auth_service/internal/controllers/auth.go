@@ -11,7 +11,6 @@ import (
 	"gorm.io/gorm"
 	"log"
 	"net/http"
-	"time"
 )
 
 const DefaultProfileImageURL = "../../../backend/uploads/users"
@@ -52,7 +51,7 @@ func Register(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(map[string]string{"message": "User registered successfully"})
 }
 func createDefaultProfile(userID uint, username, email string) {
-	profileServiceURL := "http://profile-service:8084/profiles"
+	profileServiceURL := "http://profile-service:8084/user/profiles"
 
 	profileData := map[string]interface{}{
 		"user_id":     userID,
@@ -150,51 +149,36 @@ func GetProfile(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(user)
 }
 
-func ValidateSession(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("session_token")
-	if err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
+func UpdateUser(w http.ResponseWriter, r *http.Request) {
+	var updateData struct {
+		UserID   string `json:"user_id"`
+		Username string `json:"username"`
+		Email    string `json:"email"`
 	}
 
-	var session model.Session
-	if err := db.DB.Where("token = ? AND expires_at > ?",
-		cookie.Value, time.Now()).First(&session).Error; err != nil {
-		http.Error(w, "Unauthorized", http.StatusUnauthorized)
-		return
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]uint{
-		"user_id": session.UserID,
-	})
-}
-func ValidateAdmin(w http.ResponseWriter, r *http.Request) {
-	cookie, err := r.Cookie("session_token")
-	if err != nil {
-		http.Error(w, "No authorization token", http.StatusUnauthorized)
-		return
-	}
-
-	var session model.Session
-	if err := db.DB.Where("token = ?", cookie.Value).First(&session).Error; err != nil {
-		http.Error(w, "Unauthorized token", http.StatusUnauthorized)
+	if err := json.NewDecoder(r.Body).Decode(&updateData); err != nil {
+		http.Error(w, "Invalid request body", http.StatusBadRequest)
 		return
 	}
 
 	var user model.User
-	if err := db.DB.First(&user, session.UserID).Error; err != nil {
-		http.Error(w, "User not found", http.StatusUnauthorized)
+	if err := db.DB.Where("id = ?", updateData.UserID).First(&user).Error; err != nil {
+		http.Error(w, "User not found", http.StatusNotFound)
 		return
 	}
 
-	if !user.IsAdmin {
-		http.Error(w, "Forbidden", http.StatusUnauthorized)
+	if updateData.Username != "" {
+		user.Username = updateData.Username
+	}
+	if updateData.Email != "" {
+		user.Email = updateData.Email
+	}
+
+	if err := db.DB.Save(&user).Error; err != nil {
+		http.Error(w, "Failed to update user in auth-service", http.StatusInternalServerError)
 		return
 	}
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]uint{
-		"admin_id": user.ID,
-	})
+
 	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(map[string]string{"message": "User updated in auth-service"})
 }

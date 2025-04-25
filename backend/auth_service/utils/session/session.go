@@ -19,7 +19,6 @@ func CreateSession(w http.ResponseWriter, r *http.Request, userID uint) error {
 	sessionToken := generateSessionToken()
 	expiration := time.Now().Add(24 * time.Hour)
 
-	// Save session to database
 	session := model.Session{
 		UserID:    userID,
 		Token:     sessionToken,
@@ -29,7 +28,6 @@ func CreateSession(w http.ResponseWriter, r *http.Request, userID uint) error {
 		return err
 	}
 
-	// Set session token in a secure HttpOnly cookie
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session_token",
 		Value:    sessionToken,

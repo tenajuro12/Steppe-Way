@@ -19,7 +19,6 @@ func ConnectDB() {
 
 	DB = dbInstance
 
-	// AutoMigrate models
 	err = DB.AutoMigrate(&models.Blog{}, &models.Comment{}, &models.BlogLike{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)

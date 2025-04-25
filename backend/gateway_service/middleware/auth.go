@@ -4,9 +4,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"log"
 	"net/http"
+	"strconv"
 )
 
 func AuthMiddleware(next http.Handler) http.Handler {
@@ -21,6 +22,7 @@ func AuthMiddleware(next http.Handler) http.Handler {
 		}
 		log.Printf("Found session token: %s", cookie.Value)
 
+		// Call to auth-service
 		authServiceURL := "http://auth-service:8082/validate-session"
 		req, err := http.NewRequest("GET", authServiceURL, nil)
 		if err != nil {
@@ -46,10 +48,11 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		var authResponse map[string]interface{}
 		json.Unmarshal(body, &authResponse)
 
+		// user_id
 		userID, exists := authResponse["user_id"].(float64)
 		if !exists {
 			log.Println("Auth service response did not contain user_id")
@@ -57,10 +60,24 @@ func AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
+		// username
+		username, usernameExists := authResponse["username"].(string)
+		if !usernameExists {
+			log.Println("Auth service response did not contain username")
+			http.Error(w, "Unauthorized - Invalid session", http.StatusUnauthorized)
+			return
+		}
+
+		// Вставим в заголовки
+		r.Header.Set("X-User-ID", strconv.Itoa(int(userID)))
+		r.Header.Set("X-Username", username)
+
+		// передаем через context
 		ctx := context.WithValue(r.Context(), "user_id", uint(userID))
+		ctx = context.WithValue(ctx, "username", username)
 		r = r.WithContext(ctx)
 
-		log.Printf("Authentication successful, forwarding to blogs service")
+		log.Printf("Authentication successful: user_id=%v username=%v", int(userID), username)
 		next.ServeHTTP(w, r)
 	})
 }
