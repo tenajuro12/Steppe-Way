@@ -1,12 +1,15 @@
-package model
+package models
 
-import "gorm.io/gorm"
+import "time"
 
 type Review struct {
-	gorm.Model
-	Content      string  `json:"content"`
-	Rating       float64 `json:"rating" gorm:"type:decimal(2,1);check:rating >= 1 AND rating <= 5"`
-	AttractionID uint    `json:"attraction_id"`
-	UserID       uint    `json:"user_id"`
-	Username     string  `json:"username"`
+	ID           uint      `json:"id" gorm:"primaryKey"`
+	AttractionID uint      `json:"attraction_id"`
+	UserID       uint      `json:"user_id"`
+	Username     string    `json:"username"` // добавлено
+	Rating       int       `json:"rating"`
+	Comment      string    `json:"comment"`
+	ImageURL     string    `json:"image_url"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
