@@ -276,7 +276,6 @@ func (h *PlanHandler) OptimizeRoute(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get updated items
 	items, err := h.service.GetPlanItems(uint(planID))
 	if err != nil {
 		errorResponse(w, "Route optimized but failed to retrieve items", http.StatusInternalServerError)

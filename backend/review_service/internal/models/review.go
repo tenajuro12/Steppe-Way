@@ -6,7 +6,7 @@ type Review struct {
 	ID           uint      `json:"id" gorm:"primaryKey"`
 	AttractionID uint      `json:"attraction_id"`
 	UserID       uint      `json:"user_id"`
-	Username     string    `json:"username"` // добавлено
+	Username     string    `json:"username"`
 	Rating       int       `json:"rating"`
 	Comment      string    `json:"comment"`
 	ImageURL     string    `json:"image_url"`

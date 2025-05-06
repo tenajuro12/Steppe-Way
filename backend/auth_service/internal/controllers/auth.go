@@ -84,12 +84,18 @@ func createDefaultProfile(userID uint, username, email string) {
 }
 
 func Login(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+
 	var creds struct {
 		Email    string `json:"email"`
 		Password string `json:"password"`
 	}
 
-	json.NewDecoder(r.Body).Decode(&creds)
+	if err := json.NewDecoder(r.Body).Decode(&creds); err != nil {
+		http.Error(w, "Invalid request format", http.StatusBadRequest)
+		return
+	}
+
 	var user model.User
 	if err := db.DB.Where("email=?", creds.Email).First(&user).Error; err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -105,15 +111,21 @@ func Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := utils.CreateSession(w, r, user.ID); err != nil {
+	sessionToken, err := utils.CreateSession(w, r, user.ID)
+	if err != nil {
 		http.Error(w, "Session error", http.StatusInternalServerError)
 		return
 	}
+
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(map[string]string{"message": "Login successful"})
-
+	json.NewEncoder(w).Encode(map[string]interface{}{
+		"message":       "Login successful",
+		"user_id":       user.ID,
+		"username":      user.Username,
+		"is_admin":      user.IsAdmin,
+		"session_token": sessionToken,
+	})
 }
-
 func Logout(w http.ResponseWriter, r *http.Request) {
 	cookie, err := r.Cookie("session_token")
 	if err != nil {

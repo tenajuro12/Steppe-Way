@@ -2,6 +2,7 @@ package services
 
 import (
 	"errors"
+	"log"
 	"plan_service/internal/models"
 	"plan_service/utils"
 	database "plan_service/utils/db"
@@ -52,6 +53,11 @@ func (s *PlanService) AddItemToPlan(planItem *models.PlanItem) error {
 		Select("COALESCE(MAX(order_index), 0)").Scan(&maxOrder)
 
 	planItem.OrderIndex = maxOrder + 1
+
+	// Set default scheduled date to plan's start date if not provided
+	if planItem.ScheduledFor.IsZero() {
+		planItem.ScheduledFor = plan.StartDate
+	}
 
 	if planItem.ItemType == "attraction" {
 		attraction, err := utils.GetAttraction(planItem.ItemID)
@@ -114,7 +120,11 @@ func (s *PlanService) OptimizeRoute(planID uint, userID uint) error {
 		return err
 	}
 
+	log.Printf("Before optimization: %+v", items)
+
 	optimizedItems := utils.OptimizeRoute(items)
+
+	log.Printf("After optimization: %+v", optimizedItems)
 
 	tx := database.DB.Begin()
 	for _, item := range optimizedItems {

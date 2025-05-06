@@ -23,12 +23,13 @@ func SetupRoutes() *mux.Router {
 	admin.Use(middleware.AdminAuthMiddleware)
 	admin.HandleFunc("", controllers.CreateAttraction).Methods("POST")
 	admin.HandleFunc("", controllers.ListAttractions).Methods("GET")
-	admin.HandleFunc("/{id}", controllers.GetAttraction).Methods("GET")
 	admin.HandleFunc("/{id}", controllers.UpdateAttraction).Methods("PUT")
 	admin.HandleFunc("/{id}", controllers.DeleteAttraction).Methods("DELETE")
 	admin.HandleFunc("/{id}/publish", controllers.PublishAttraction).Methods("POST")
 	admin.HandleFunc("/{id}/unpublish", controllers.UnpublishAttraction).Methods("POST")
 
 	r.HandleFunc("/attractions", controllers.ListPublishedAttractions).Methods("GET")
+	r.HandleFunc("/attractions/{id}", controllers.GetAttraction).Methods("GET")
+
 	return r
 }

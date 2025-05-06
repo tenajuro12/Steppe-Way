@@ -25,7 +25,7 @@ type PlanItem struct {
 	Description  string    `json:"description"`
 	Location     string    `json:"location"`
 	Address      string    `json:"address"`
-	ScheduledFor time.Time `json:"scheduled_for"`
+	ScheduledFor time.Time `json:"scheduled_for,omitempty"` // Added omitempty
 	Duration     int       `json:"duration"`
 	OrderIndex   int       `json:"order_index"`
 	Notes        string    `json:"notes"`

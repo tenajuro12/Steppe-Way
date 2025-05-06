@@ -7,8 +7,8 @@ import (
 var AllowedOrigins = []string{
 	"http://localhost:8080",
 	"http://10.0.2.2:8080",
-	"http://192.168.1.71:8080",
-	"http://localhost:60357",
+	"http://192.168.88.65:8080",
+	"http://localhost:3000",
 }
 
 func isAllowedOrigin(origin string) bool {
@@ -29,7 +29,7 @@ func CorsMiddleware(next http.Handler) http.Handler {
 		}
 
 		w.Header().Set("Access-Control-Allow-Methods", "GET, POST, OPTIONS, PUT, DELETE, PATCH")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With, x-session-token, x-user-id")
 		w.Header().Set("Access-Control-Allow-Credentials", "true")
 		w.Header().Set("Access-Control-Expose-Headers", "Set-Cookie")
 

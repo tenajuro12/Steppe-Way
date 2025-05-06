@@ -35,7 +35,6 @@ func generateRandomFilename(originalFilename string) string {
 func uploadImage(file io.Reader, filename string) (string, error) {
 	uploadDir := "/app/uploads/events" // ✅ Correct directory for event images
 
-	// Create the events directory if it doesn't exist
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create upload directory: %v", err)
 	}
@@ -49,12 +48,10 @@ func uploadImage(file io.Reader, filename string) (string, error) {
 	}
 	defer dst.Close()
 
-	// Save the file to the target location
 	if _, err := io.Copy(dst, file); err != nil {
 		return "", fmt.Errorf("failed to save file: %v", err)
 	}
 
-	// ✅ Return URL for accessing the image
 	return fmt.Sprintf("/uploads/events/%s", randomFilename), nil
 }
 
@@ -97,7 +94,6 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 		log.Println("No image uploaded. Proceeding without image.")
 	}
 
-	// Extract form fields
 	title := r.FormValue("title")
 	description := r.FormValue("description")
 	location := r.FormValue("location")
@@ -106,7 +102,6 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 	startDateStr := r.FormValue("start_date")
 	endDateStr := r.FormValue("end_date")
 
-	// Validate capacity
 	capacity, err := strconv.Atoi(capacityStr)
 	if err != nil {
 		log.Printf("Invalid capacity value: %v", err)
@@ -114,7 +109,6 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Validate dates
 	startDate, err := time.Parse(time.RFC3339, startDateStr)
 	if err != nil {
 		log.Printf("Invalid start date format: %v", err)
@@ -129,7 +123,6 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Create the event object
 	event := models.Event{
 		Title:       title,
 		Description: description,
@@ -142,14 +135,12 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 		AdminID:     adminID,
 	}
 
-	// Save to database
 	if err := db.DB.Create(&event).Error; err != nil {
 		log.Printf("Failed to create event: %v", err)
 		http.Error(w, "Failed to create event", http.StatusInternalServerError)
 		return
 	}
 
-	// Return the created event
 	w.WriteHeader(http.StatusCreated)
 	json.NewEncoder(w).Encode(event)
 }

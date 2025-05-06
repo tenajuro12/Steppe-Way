@@ -1,4 +1,4 @@
-// events_service/utils/db/db.go
+// events_service/utils/db/database.go
 package db
 
 import (

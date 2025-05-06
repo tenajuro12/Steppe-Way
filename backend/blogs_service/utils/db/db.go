@@ -19,7 +19,7 @@ func ConnectDB() {
 
 	DB = dbInstance
 
-	err = DB.AutoMigrate(&models.Blog{}, &models.Comment{}, &models.BlogLike{})
+	err = DB.AutoMigrate(&models.Blog{}, &models.Comment{}, &models.BlogLike{}, &models.BlogImage{}, &models.CommentImage{})
 	if err != nil {
 		log.Fatalf("Failed to migrate database: %v", err)
 	}

@@ -15,7 +15,8 @@ func generateSessionToken() string {
 	return hex.EncodeToString(bytes)
 }
 
-func CreateSession(w http.ResponseWriter, r *http.Request, userID uint) error {
+// Modified to return the session token
+func CreateSession(w http.ResponseWriter, r *http.Request, userID uint) (string, error) {
 	sessionToken := generateSessionToken()
 	expiration := time.Now().Add(24 * time.Hour)
 
@@ -25,7 +26,7 @@ func CreateSession(w http.ResponseWriter, r *http.Request, userID uint) error {
 		ExpiresAt: expiration,
 	}
 	if err := db.DB.Create(&session).Error; err != nil {
-		return err
+		return "", err
 	}
 
 	http.SetCookie(w, &http.Cookie{
@@ -34,23 +35,35 @@ func CreateSession(w http.ResponseWriter, r *http.Request, userID uint) error {
 		Expires:  expiration,
 		HttpOnly: true,
 		Path:     "/",
+		// Add these for cross-origin support
+		SameSite: http.SameSiteNoneMode,
+		Secure:   true,
 	})
-	return nil
+	return sessionToken, nil
 }
 
 func GetSessionUserID(r *http.Request) (uint, bool) {
+	// First check for cookie
 	cookie, err := r.Cookie("session_token")
-	if err != nil {
-		return 0, false
+	if err == nil {
+		var session model.Session
+		if err := db.DB.Where("token = ? AND expires_at > ?",
+			cookie.Value, time.Now()).First(&session).Error; err == nil {
+			return session.UserID, true
+		}
 	}
 
-	var session model.Session
-	if err := db.DB.Where("token = ? AND expires_at > ?",
-		cookie.Value, time.Now()).First(&session).Error; err != nil {
-		return 0, false
+	// If cookie not found or invalid, check header
+	tokenHeader := r.Header.Get("X-Session-Token")
+	if tokenHeader != "" {
+		var session model.Session
+		if err := db.DB.Where("token = ? AND expires_at > ?",
+			tokenHeader, time.Now()).First(&session).Error; err == nil {
+			return session.UserID, true
+		}
 	}
 
-	return session.UserID, true
+	return 0, false
 }
 
 func DestroySession(w http.ResponseWriter, r *http.Request) error {
@@ -71,6 +84,8 @@ func DestroySession(w http.ResponseWriter, r *http.Request) error {
 		Expires:  time.Now().Add(-1 * time.Hour),
 		HttpOnly: true,
 		Path:     "/",
+		SameSite: http.SameSiteNoneMode,
+		Secure:   true,
 	})
 	return nil
 }

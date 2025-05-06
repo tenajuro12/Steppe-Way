@@ -14,4 +14,5 @@ type Attraction struct {
 	IsPublished bool   `json:"is_published" gorm:"default:false"`
 	AdminID     uint   `json:"admin_id"`
 	ImageURL    string `json:"image_url"`
+	Category    string `json:"category"`
 }

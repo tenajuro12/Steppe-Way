@@ -19,9 +19,12 @@ type ServiceConfig struct {
 
 var services = map[string]ServiceConfig{
 	"blog": {
-		URL:   "http://blogs-service:8081",
-		Paths: []string{"/blogs"},
-		Auth:  true,
+		URL: "http://blogs-service:8081",
+		Paths: []string{
+			"/blogs",
+			"/comments",
+		},
+		Auth: true,
 	},
 	"auth": {
 		URL: "http://auth-service:8082",
@@ -75,6 +78,16 @@ var services = map[string]ServiceConfig{
 		Paths: []string{"/uploads"},
 		Auth:  false,
 	},
+	"plans": {
+		URL: "http://plan-service:8087",
+		Paths: []string{
+			"/api/plans",
+			"/api/plans/",
+			"/api/templates",
+			"/api/templates/create-plan",
+		},
+		Auth: true,
+	},
 }
 
 var pathAuthOverrides = map[string]bool{
@@ -83,6 +96,7 @@ var pathAuthOverrides = map[string]bool{
 	"/attractions":       true,
 	"/profiles":          true,
 	"/review":            true,
+	"/plans":             true,
 }
 
 func main() {
@@ -115,7 +129,7 @@ func setupRoutes(r *mux.Router) {
 				path == "/profiles/{user_id}/unfollow" ||
 				path == "/profiles/{user_id}/followers" ||
 				path == "/profiles/{user_id}/following" {
-				r.Handle(path, handler).Methods("PATCH", "POST", "DELETE", "GET") // ✅ FIXED
+				r.Handle(path, handler).Methods("PATCH", "POST", "DELETE", "GET")
 			} else {
 				r.PathPrefix(path).Handler(handler)
 			}

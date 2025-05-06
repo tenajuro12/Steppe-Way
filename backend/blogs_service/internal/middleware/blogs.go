@@ -44,7 +44,6 @@ func BlogsAuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 
-		// Read and parse the response body to get user ID
 		body, err := ioutil.ReadAll(resp.Body)
 		if err != nil {
 			log.Printf("Error reading response body: %v", err)

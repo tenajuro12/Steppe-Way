@@ -12,6 +12,7 @@ import (
 	"os"
 	"profile_service/internal/db"
 	"profile_service/internal/models"
+	"profile_service/utils"
 	"strconv"
 )
 
@@ -144,6 +145,7 @@ func UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 
 	w.Header().Set("Content-Type", "application/json")
+	go utils.NotifyBlogsService(profile.UserID, profile.Username)
 	json.NewEncoder(w).Encode(profile)
 }
 

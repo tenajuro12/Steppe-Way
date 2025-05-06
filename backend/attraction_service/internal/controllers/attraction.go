@@ -27,6 +27,7 @@ type AttractionRequest struct {
 	Description string `json:"description"`
 	City        string `json:"city"`
 	Address     string `json:"address"`
+	Category    string `json:"category"`
 	Location    string `json:"location"`
 	ImageURL    string `json:"image_url"`
 }
@@ -67,6 +68,7 @@ func CreateAttraction(w http.ResponseWriter, r *http.Request) {
 		City:        r.FormValue("city"),
 		Location:    r.FormValue("location"),
 		Address:     r.FormValue("address"),
+		Category:    r.FormValue("category"),
 		AdminID:     adminID,
 		ImageURL:    imageURL,
 	}
@@ -80,7 +82,7 @@ func CreateAttraction(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(attraction)
 }
 func uploadImage(file io.Reader, filename string) (string, error) {
-	uploadDir := "/app/uploads" // Matches Docker volume mount path
+	uploadDir := "/app/uploads"
 
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create upload directory: %v", err)
@@ -107,7 +109,7 @@ func GetAttraction(w http.ResponseWriter, r *http.Request) {
 	id := vars["id"]
 	var attraction models.Attraction
 	if err := db.DB.First(&attraction, id).Error; err != nil {
-		http.Error(w, "Not found event", http.StatusNotFound)
+		http.Error(w, "Not found attraction", http.StatusNotFound)
 		return
 	}
 	json.NewEncoder(w).Encode(attraction)
@@ -135,6 +137,7 @@ func UpdateAttraction(w http.ResponseWriter, r *http.Request) {
 	attraction.Address = req.Address
 	attraction.Location = req.Location
 	attraction.ImageURL = req.ImageURL
+	attraction.Category = req.Category
 
 	if err := db.DB.Save(&attraction).Error; err != nil {
 		http.Error(w, "Can't update attraction", http.StatusBadRequest)
@@ -212,7 +215,7 @@ func ListPublishedAttractions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := struct {
-		Attractions []models.Attraction `json:"attractions"` // ✅ Изменено с "events" на "attractions"
+		Attractions []models.Attraction `json:"attractions"`
 		Total       int64               `json:"total"`
 		Page        int                 `json:"page"`
 		PageSize    int                 `json:"page_size"`
