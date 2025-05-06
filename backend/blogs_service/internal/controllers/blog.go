@@ -1,56 +1,112 @@
 package controllers
 
 import (
+	"crypto/rand"
 	"diplomaPorject/backend/blogs_service/internal/models"
+	"diplomaPorject/backend/blogs_service/utils"
 	"diplomaPorject/backend/blogs_service/utils/db"
+	"encoding/hex"
 	"encoding/json"
 	"fmt"
 	"github.com/gorilla/mux"
+	"io"
 	"log"
+	"mime/multipart"
 	"net/http"
+	"os"
+	"path/filepath"
 	"strconv"
 )
 
+func generateRandomFilename(originalFilename string) string {
+	bytes := make([]byte, 16)
+	rand.Read(bytes)
+	return hex.EncodeToString(bytes) + filepath.Ext(originalFilename)
+}
+
+func uploadImages(files []*multipart.FileHeader) ([]string, error) {
+	var imageURLs []string
+	uploadDir := "/app/uploads"
+
+	if err := os.MkdirAll(uploadDir, 0755); err != nil {
+		return nil, fmt.Errorf("failed to create upload directory: %v", err)
+	}
+
+	for _, fileHeader := range files {
+		file, err := fileHeader.Open()
+		if err != nil {
+			return nil, fmt.Errorf("failed to open file: %v", err)
+		}
+		defer file.Close()
+
+		randomFilename := generateRandomFilename(fileHeader.Filename)
+		filePath := filepath.Join(uploadDir, randomFilename)
+
+		dst, err := os.Create(filePath)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create file: %v", err)
+		}
+		defer dst.Close()
+
+		if _, err := io.Copy(dst, file); err != nil {
+			return nil, fmt.Errorf("failed to save file: %v", err)
+		}
+
+		imageURLs = append(imageURLs, "/uploads/"+randomFilename)
+	}
+	return imageURLs, nil
+}
+
 func CreateBlog(w http.ResponseWriter, r *http.Request) {
-	userIDValue := r.Context().Value("user_id")
-	if userIDValue == nil {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
+	userID, ok := r.Context().Value("user_id").(uint)
+	if !ok {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
 
-	userID, ok := userIDValue.(uint)
-	if !ok {
-		http.Error(w, "Invalid user ID", http.StatusInternalServerError)
+	username, _ := utils.GetUsername(userID) // <- НОВАЯ строка
+
+	title := r.FormValue("title")
+	content := r.FormValue("content")
+	category := r.FormValue("category")
+
+	files := r.MultipartForm.File["images"]
+	imageURLs, err := uploadImages(files)
+	if err != nil {
+		http.Error(w, "Image upload failed", http.StatusInternalServerError)
 		return
 	}
 
-	var blog models.Blog
-	if err := json.NewDecoder(r.Body).Decode(&blog); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
-		return
-	}
-
-	blog.UserID = userID
-
-	if err := validateBlog(&blog); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-		return
+	blog := models.Blog{
+		Title:    title,
+		Content:  content,
+		Category: category,
+		UserID:   userID,
+		Username: username,
 	}
 
 	if err := db.DB.Create(&blog).Error; err != nil {
-		log.Printf("Error creating blog: %v", err)
 		http.Error(w, "Failed to create blog", http.StatusInternalServerError)
 		return
 	}
 
-	w.WriteHeader(http.StatusCreated)
+	for _, u := range imageURLs {
+		db.DB.Create(&models.BlogImage{BlogID: blog.ID, URL: u})
+	}
+
+	db.DB.Preload("Images").First(&blog, blog.ID)
 	json.NewEncoder(w).Encode(blog)
 }
 
 func GetBlogs(w http.ResponseWriter, r *http.Request) {
 	var blogs []models.Blog
 
-	query := db.DB.Preload("Comments")
+	query := db.DB.Preload("Comments").Preload("Images") // <- добавлено
 
 	if category := r.URL.Query().Get("category"); category != "" {
 		query = query.Where("category = ?", category)
@@ -102,7 +158,7 @@ func GetBlog(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var blog models.Blog
-	if err := db.DB.Preload("Comments").First(&blog, id).Error; err != nil {
+	if err := db.DB.Preload("Comments").Preload("Images").First(&blog, id).Error; err != nil {
 		http.Error(w, "Blog not found", http.StatusNotFound)
 		return
 	}
@@ -111,12 +167,16 @@ func GetBlog(w http.ResponseWriter, r *http.Request) {
 }
 
 func UpdateBlog(w http.ResponseWriter, r *http.Request) {
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		http.Error(w, "Failed to parse form", http.StatusBadRequest)
+		return
+	}
+
 	userIDValue := r.Context().Value("user_id")
 	if userIDValue == nil {
 		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 		return
 	}
-
 	userID, ok := userIDValue.(uint)
 	if !ok {
 		http.Error(w, "Invalid user ID", http.StatusInternalServerError)
@@ -130,38 +190,54 @@ func UpdateBlog(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var existingBlog models.Blog
-	if err := db.DB.First(&existingBlog, id).Error; err != nil {
+	var blog models.Blog
+	if err := db.DB.Preload("Images").First(&blog, id).Error; err != nil {
 		http.Error(w, "Blog not found", http.StatusNotFound)
 		return
 	}
 
-	if existingBlog.UserID != userID {
+	if blog.UserID != userID {
 		http.Error(w, "Unauthorized to update this blog", http.StatusForbidden)
 		return
 	}
 
-	var updatedBlog models.Blog
-	if err := json.NewDecoder(r.Body).Decode(&updatedBlog); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+	title := r.FormValue("title")
+	content := r.FormValue("content")
+	category := r.FormValue("category")
+
+	if title == "" || content == "" {
+		http.Error(w, "Title and content are required", http.StatusBadRequest)
 		return
 	}
 
-	updatedBlog.ID = existingBlog.ID
-	updatedBlog.UserID = existingBlog.UserID
+	blog.Title = title
+	blog.Content = content
+	blog.Category = category
 
-	if err := validateBlog(&updatedBlog); err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
+	db.DB.Where("blog_id = ?", blog.ID).Delete(&models.BlogImage{})
+
+	files := r.MultipartForm.File["images"]
+	imageURLs, err := uploadImages(files)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("Image upload failed: %v", err), http.StatusInternalServerError)
 		return
 	}
 
-	if err := db.DB.Save(&updatedBlog).Error; err != nil {
-		log.Printf("Error updating blog: %v", err)
+	for _, url := range imageURLs {
+		image := models.BlogImage{
+			BlogID: blog.ID,
+			URL:    url,
+		}
+		db.DB.Create(&image)
+	}
+
+	if err := db.DB.Save(&blog).Error; err != nil {
 		http.Error(w, "Failed to update blog", http.StatusInternalServerError)
 		return
 	}
 
-	json.NewEncoder(w).Encode(updatedBlog)
+	db.DB.Preload("Images").First(&blog, blog.ID)
+	json.NewEncoder(w).Encode(blog)
 }
 
 func DeleteBlog(w http.ResponseWriter, r *http.Request) {
@@ -204,25 +280,20 @@ func DeleteBlog(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func validateBlog(blog *models.Blog) error {
-	if blog.Title == "" {
-		return fmt.Errorf("title is required")
+func SyncUsername(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		UserID   uint   `json:"user_id"`
+		Username string `json:"username"`
 	}
-	if len(blog.Title) > 255 {
-		return fmt.Errorf("title is too long")
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "bad json", http.StatusBadRequest)
+		return
 	}
-	if blog.Content == "" {
-		return fmt.Errorf("content is required")
-	}
-	return nil
-}
-
-func validateComment(comment *models.Comment) error {
-	if comment.Content == "" {
-		return fmt.Errorf("comment content is required")
-	}
-	if len(comment.Content) > 500 {
-		return fmt.Errorf("comment is too long")
-	}
-	return nil
+	db.DB.Model(&models.Blog{}).
+		Where("user_id = ?", req.UserID).
+		Update("username", req.Username)
+	db.DB.Model(&models.Comment{}).
+		Where("user_id = ?", req.UserID).
+		Update("username", req.Username)
+	w.WriteHeader(http.StatusNoContent)
 }
