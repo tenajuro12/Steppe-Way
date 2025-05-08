@@ -146,6 +146,25 @@
       networks:
         - app-network
 
+    favorites-service:
+        build: ./fav_service
+        container_name: fav-service
+        environment:
+          - DB_HOST=db
+          - DB_USER=postgres
+          - DB_PASSWORD=123456
+          - DB_NAME=TravelApp
+          - AUTH_SERVICE_URL=http://auth-service:8082
+        volumes:
+          - ./uploads/fav:/app/uploads/fav
+        ports:
+          - "8088:8088"
+        depends_on:
+          db:
+            condition: service_healthy
+        networks:
+          - app-network
+
     db:
       image: postgres:latest
       container_name: postgres-db
