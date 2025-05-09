@@ -12,6 +12,8 @@ type Event struct {
 	StartDate    time.Time `json:"start_date"`
 	EndDate      time.Time `json:"end_date"`
 	Location     string    `json:"location"`
+	Address      string    `json:"address"`
+	Link         string    `json:"link"`
 	Capacity     int       `json:"capacity"`
 	IsPublished  bool      `json:"is_published" gorm:"default:false"`
 	AdminID      uint      `json:"admin_id"`

@@ -22,6 +22,8 @@ type EventRequest struct {
 	StartDate   string `json:"start_date"`
 	EndDate     string `json:"end_date"`
 	Location    string `json:"location"`
+	Address     string `json:"address"`
+	Link        string `json:"link"`
 	Capacity    int    `json:"capacity"`
 	Category    string `json:"category"`
 	ImageURL    string `json:"image_url"`
@@ -33,7 +35,7 @@ func generateRandomFilename(originalFilename string) string {
 }
 
 func uploadImage(file io.Reader, filename string) (string, error) {
-	uploadDir := "/app/uploads/events" // ✅ Correct directory for event images
+	uploadDir := "/app/uploads/events"
 
 	if err := os.MkdirAll(uploadDir, 0755); err != nil {
 		return "", fmt.Errorf("failed to create upload directory: %v", err)
@@ -55,16 +57,13 @@ func uploadImage(file io.Reader, filename string) (string, error) {
 	return fmt.Sprintf("/uploads/events/%s", randomFilename), nil
 }
 
-// CreateEvent handles event creation with image upload
 func CreateEvent(w http.ResponseWriter, r *http.Request) {
-	// Parse multipart form (max memory: 32 MB)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		log.Printf("Failed to parse form: %v", err)
 		http.Error(w, "Failed to parse form", http.StatusBadRequest)
 		return
 	}
 
-	// Get admin ID from context
 	adminIDValue := r.Context().Value("admin_id")
 	if adminIDValue == nil {
 		log.Printf("No admin_id found in context")
@@ -79,7 +78,6 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Handle image file upload
 	var imageURL string
 	file, header, err := r.FormFile("image")
 	if err == nil {
@@ -98,6 +96,8 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 	description := r.FormValue("description")
 	location := r.FormValue("location")
 	category := r.FormValue("category")
+	address := r.FormValue("address")
+	link := r.FormValue("link")
 	capacityStr := r.FormValue("capacity")
 	startDateStr := r.FormValue("start_date")
 	endDateStr := r.FormValue("end_date")
@@ -129,6 +129,8 @@ func CreateEvent(w http.ResponseWriter, r *http.Request) {
 		StartDate:   startDate,
 		EndDate:     endDate,
 		Location:    location,
+		Address:     address,
+		Link:        link,
 		Capacity:    capacity,
 		Category:    category,
 		ImageURL:    imageURL,
@@ -189,7 +191,9 @@ func UpdateEvent(w http.ResponseWriter, r *http.Request) {
 	event.Capacity = req.Capacity
 	event.Category = req.Category
 	event.ImageURL = req.ImageURL
-
+	event.Address = req.Address
+	event.Link = req.Link
+	
 	if err := db.DB.Save(&event).Error; err != nil {
 		http.Error(w, "Cant update event", http.StatusBadRequest)
 		return
