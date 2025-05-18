@@ -1,7 +1,11 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
+	"fmt"
+	"io"
+	"log"
 	"net/http"
 	"plan_service/internal/models"
 	"plan_service/internal/services"
@@ -75,7 +79,6 @@ func (h *PlanHandler) GetPlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Get plan items
 	items, err := h.service.GetPlanItems(uint(planID))
 	if err != nil {
 		errorResponse(w, "Failed to retrieve plan items", http.StatusInternalServerError)
@@ -113,7 +116,6 @@ func (h *PlanHandler) UpdatePlan(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Decode updates
 	var updates models.Plan
 	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
 		errorResponse(w, "Invalid request body", http.StatusBadRequest)
@@ -304,21 +306,223 @@ func (h *PlanHandler) CreatePlanFromTemplate(w http.ResponseWriter, r *http.Requ
 		return
 	}
 
+	bodyBytes, _ := io.ReadAll(r.Body)
+	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
+	log.Printf("Raw request body: %s", string(bodyBytes))
+
 	var request struct {
-		TemplateID uint      `json:"template_id"`
-		StartDate  time.Time `json:"start_date"`
+		TemplateID uint   `json:"template_id"`
+		StartDate  string `json:"start_date"`
 	}
 
 	if err := json.NewDecoder(r.Body).Decode(&request); err != nil {
-		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		log.Printf("Error decoding JSON: %v", err)
+		errorResponse(w, fmt.Sprintf("Invalid request body: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	plan, err := h.service.CreatePlanFromTemplate(request.TemplateID, userID, request.StartDate)
+	startDate, err := time.Parse(time.RFC3339, request.StartDate)
 	if err != nil {
+		log.Printf("Error parsing date: %v", err)
+		errorResponse(w, fmt.Sprintf("Invalid date format: %v", err), http.StatusBadRequest)
+		return
+	}
+
+	plan, err := h.service.CreatePlanFromTemplate(request.TemplateID, userID, startDate)
+	if err != nil {
+		log.Printf("Error creating plan: %v", err)
 		errorResponse(w, "Failed to create plan from template: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
 
 	responseWriter(w, plan, http.StatusCreated)
+}
+func (h *PlanHandler) CreateTemplate(w http.ResponseWriter, r *http.Request) {
+	var template models.PlanTemplate
+	if err := json.NewDecoder(r.Body).Decode(&template); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	userID := GetUserID(r)
+	if userID == 0 {
+		errorResponse(w, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	if err := h.service.CreateTemplate(&template); err != nil {
+		errorResponse(w, "Failed to create template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	responseWriter(w, template, http.StatusCreated)
+}
+
+func (h *PlanHandler) GetTemplate(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	templateID, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		errorResponse(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	template, err := h.service.GetTemplate(uint(templateID))
+	if err != nil {
+		errorResponse(w, "Template not found", http.StatusNotFound)
+		return
+	}
+
+	responseWriter(w, template, http.StatusOK)
+}
+
+func (h *PlanHandler) UpdateTemplate(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	templateID, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		errorResponse(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	userID := GetUserID(r)
+	if userID == 0 {
+		errorResponse(w, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var updates models.PlanTemplate
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	updates.ID = uint(templateID)
+
+	if err := h.service.UpdateTemplate(&updates); err != nil {
+		errorResponse(w, "Failed to update template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	responseWriter(w, updates, http.StatusOK)
+}
+
+func (h *PlanHandler) DeleteTemplate(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	templateID, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		errorResponse(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	userID := GetUserID(r)
+	if userID == 0 {
+		errorResponse(w, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	if err := h.service.DeleteTemplate(uint(templateID)); err != nil {
+		errorResponse(w, "Failed to delete template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	responseWriter(w, map[string]string{"message": "Template deleted successfully"}, http.StatusOK)
+}
+
+func (h *PlanHandler) GetTemplateItems(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	templateID, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		errorResponse(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	items, err := h.service.GetTemplateItems(uint(templateID))
+	if err != nil {
+		errorResponse(w, "Failed to retrieve template items: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	responseWriter(w, items, http.StatusOK)
+}
+
+func (h *PlanHandler) AddItemToTemplate(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	templateID, err := strconv.ParseUint(vars["id"], 10, 32)
+	if err != nil {
+		errorResponse(w, "Invalid template ID", http.StatusBadRequest)
+		return
+	}
+
+	userID := GetUserID(r)
+	if userID == 0 {
+		errorResponse(w, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var templateItem models.TemplateItem
+	if err := json.NewDecoder(r.Body).Decode(&templateItem); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	templateItem.TemplateID = uint(templateID)
+
+	if err := h.service.AddItemToTemplate(&templateItem); err != nil {
+		errorResponse(w, "Failed to add item to template: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	responseWriter(w, templateItem, http.StatusCreated)
+}
+
+func (h *PlanHandler) UpdateTemplateItem(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	itemID, err := strconv.ParseUint(vars["itemId"], 10, 32)
+	if err != nil {
+		errorResponse(w, "Invalid item ID", http.StatusBadRequest)
+		return
+	}
+
+	userID := GetUserID(r)
+	if userID == 0 {
+		errorResponse(w, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	var updates models.TemplateItem
+	if err := json.NewDecoder(r.Body).Decode(&updates); err != nil {
+		errorResponse(w, "Invalid request body", http.StatusBadRequest)
+		return
+	}
+
+	updates.ID = uint(itemID)
+
+	if err := h.service.UpdateTemplateItem(&updates); err != nil {
+		errorResponse(w, "Failed to update template item: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	responseWriter(w, updates, http.StatusOK)
+}
+
+func (h *PlanHandler) DeleteTemplateItem(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	itemID, err := strconv.ParseUint(vars["itemId"], 10, 32)
+	if err != nil {
+		errorResponse(w, "Invalid item ID", http.StatusBadRequest)
+		return
+	}
+
+	userID := GetUserID(r)
+	if userID == 0 {
+		errorResponse(w, "User not authenticated", http.StatusUnauthorized)
+		return
+	}
+
+	if err := h.service.DeleteTemplateItem(uint(itemID)); err != nil {
+		errorResponse(w, "Failed to delete template item: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	responseWriter(w, map[string]string{"message": "Template item deleted successfully"}, http.StatusOK)
 }
