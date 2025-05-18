@@ -45,7 +45,18 @@ func main() {
 	api.HandleFunc("/plans/items/{itemId:[0-9]+}", planHandler.UpdatePlanItem).Methods("PUT")
 	api.HandleFunc("/plans/items/{itemId:[0-9]+}", planHandler.DeletePlanItem).Methods("DELETE")
 
+	api.HandleFunc("/plans/{id:[0-9]+}/directions", planHandler.GetPlanDirections).Methods("GET")
+	api.HandleFunc("/plans/items/{fromItemId:[0-9]+}/directions/{toItemId:[0-9]+}", planHandler.GetDirectionsBetweenItems).Methods("GET")
+
 	api.HandleFunc("/templates", planHandler.GetTemplates).Methods("GET")
+	api.HandleFunc("/templates", planHandler.CreateTemplate).Methods("POST")
+	api.HandleFunc("/templates/{id:[0-9]+}", planHandler.GetTemplate).Methods("GET")
+	api.HandleFunc("/templates/{id:[0-9]+}", planHandler.UpdateTemplate).Methods("PUT")
+	api.HandleFunc("/templates/{id:[0-9]+}", planHandler.DeleteTemplate).Methods("DELETE")
+	api.HandleFunc("/templates/{id:[0-9]+}/items", planHandler.GetTemplateItems).Methods("GET")
+	api.HandleFunc("/templates/{id:[0-9]+}/items", planHandler.AddItemToTemplate).Methods("POST")
+	api.HandleFunc("/templates/items/{itemId:[0-9]+}", planHandler.UpdateTemplateItem).Methods("PUT")
+	api.HandleFunc("/templates/items/{itemId:[0-9]+}", planHandler.DeleteTemplateItem).Methods("DELETE")
 	api.HandleFunc("/templates/create-plan", planHandler.CreatePlanFromTemplate).Methods("POST")
 
 	srv := &http.Server{
