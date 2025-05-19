@@ -1,5 +1,5 @@
 # Steppe Way - Comprehensive Travel Platform
-
+##Front - https://github.com/tenajuro12/Steppe-way-Front
 ## Overview
 This Travel App is a modern, microservices-based platform designed to provide users with a complete travel planning and exploration experience. The application allows users to discover accommodations, attractions, local food places, events, and create personalized travel plans.
 
@@ -203,9 +203,3 @@ Guidelines for contributing to the project:
 2. Create a feature branch
 3. Make your changes
 4. Submit a pull request
-
-## License
-[Specify license here]
-
-## Contact
-[Add contact information]
