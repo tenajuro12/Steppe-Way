@@ -1,4 +1,4 @@
-# Travel App - Comprehensive Travel Platform
+# Steppe Way - Comprehensive Travel Platform
 
 ## Overview
 This Travel App is a modern, microservices-based platform designed to provide users with a complete travel planning and exploration experience. The application allows users to discover accommodations, attractions, local food places, events, and create personalized travel plans.
